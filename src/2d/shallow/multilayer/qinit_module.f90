@@ -93,7 +93,7 @@ contains
         
         ! Local
         integer :: i, j, layer_index
-        real(kind=8) :: ximc,xim,x,xip,xipc,yjmc,yjm,y,yjp,yjpc,dq
+        real(kind=8) :: ximc,xim,x,xip,xipc,yjmc,yjm,y,yjp,yjpc,dq,domain(1:4),topoparam(1:6)
         
         ! Topography integral function
         real(kind=8) :: topointegral
@@ -117,10 +117,15 @@ contains
 
                         yjpc=min(yjp,y_hi_qinit)
                         yjmc=max(yjm,y_low_qinit)
+                        
+                        domain(1) = ximc; domain(2) = xipc
+                        domain(3) = yjmc; domain(4) = yjpc
 
-                        dq = topointegral(ximc,xipc,yjmc,yjpc,x_low_qinit, &
-                                          y_low_qinit,dx_qinit,dy_qinit,mx_qinit, &
-                                          my_qinit,qinit,1)
+                        topoparam(1) = x_low_qinit; topoparam(2) = y_low_qinit
+                        topoparam(3) = dx_qinit; topoparam(4) = dy_qinit
+                        topoparam(5) = mx_qinit; topoparam(6) = my_qinit
+
+                        dq = topointegral(domain,topoparam,qinit,1)
                         dq = dq / ((xipc-ximc)*(yjpc-yjmc)*aux(2,i,j))
 
                         if (qinit_type <= 3 * num_layers) then 
