@@ -92,7 +92,7 @@ contains
         
         ! Local
         integer :: i,j
-        real(kind=8) :: ximc,xim,x,xip,xipc,yjmc,yjm,y,yjp,yjpc,dq
+        real(kind=8) :: ximc,xim,x,xip,xipc,yjmc,yjm,y,yjp,yjpc,dq,domain(1:4),topoparam(1:6)
         
         ! Topography integral function
         real(kind=8) :: topointegral
@@ -116,10 +116,15 @@ contains
 
                         yjpc=min(yjp,y_hi_qinit)
                         yjmc=max(yjm,y_low_qinit)
+                        
+                        domain(1) = ximc; domain(2) = xipc
+                        domain(3) = yjmc; domain(4) = yjpc
+                        
+                        topoparam(1) = x_low_qinit; topoparam(2) = x_hi_qinit
+                        topoparam(3) = y_low_qinit; topoparam(4) = y_hi_qinit
+                        topoparam(5) = dx_qinit; topoparam(6) = dy_qinit
 
-                        dq = topointegral(ximc,xipc,yjmc,yjpc,x_low_qinit, &
-                                          y_low_qinit,dx_qinit,dy_qinit,mx_qinit, &
-                                          my_qinit,qinit,1)
+                        dq = topointegral(domain,topoparam,mx_qinit,my_qinit,qinit,1)
                         if (coordinate_system == 2) then
                             dq = dq / ((xipc-ximc)*(yjpc-yjmc)*aux(mcapa,i,j))
                         else
