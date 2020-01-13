@@ -1481,8 +1481,8 @@ recursive subroutine rectintegral(domain, m, integral)
       integral = int1 - int2 + int3
     else
       integral = int1
-      endif
     endif
+  endif
 
 end subroutine rectintegral
 
