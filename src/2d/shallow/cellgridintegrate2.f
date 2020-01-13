@@ -4,7 +4,7 @@ subroutine cellgridintegrate(cell, topoint)
 
 ! *** Note: xcell and ycell are no longer needed -- should be removed.
 
-   use topo_module, only: topo_data, rectintegral, intersection
+   use topo_module, only: num_topo_files, topo_order, topo_data, rectintegral, intersection
 
    ! arguments
    real(kind=8) , intent(in) :: cell(1:4), topoint
