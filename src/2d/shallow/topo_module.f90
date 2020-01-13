@@ -1394,125 +1394,139 @@ end subroutine topoarea
 
     
 
-recursive subroutine rectintegral(x1,x2,y1,y2,m,integral)
+recursive subroutine rectintegral(domain, m, integral)
 
-    ! Compute the integral of topo over the rectangle (x1,x2) x (y1,y2)
-    ! using topo arrays indexed mtopoorder(mtopofiles) through mtopoorder(m) 
-    ! (coarse to fine).
+  ! Compute the integral of topo over the rectangle (x1,x2) x (y1,y2)
+  ! using topo arrays indexed mtopoorder(mtopofiles) through mtopoorder(m) 
+  ! (coarse to fine).
 
-    ! The main call to this subroutine has corners of a grid cell for the 
-    ! rectangle and m = 1 in order to compute the integral over the cell 
-    ! using all topo arrays.
+  ! The main call to this subroutine has corners of a grid cell for the 
+  ! rectangle and m = 1 in order to compute the integral over the cell 
+  ! using all topo arrays.
 
-    ! The recursive strategy is to first compute the integral using only topo 
-    ! arrays mtopoorder(mtopofiles) to mtopoorder(m+1), 
-    ! and then apply corrections due to adding topo array mtopoorder(m).
+  ! The recursive strategy is to first compute the integral using only topo 
+  ! arrays mtopoorder(mtopofiles) to mtopoorder(m+1), 
+  ! and then apply corrections due to adding topo array mtopoorder(m).
      
-    ! Corrections are needed if the new topo array intersects the grid cell.
-    ! Let the intersection be (x1m,x2m) x (y1m,y2m).
-    ! Two corrections are needed, first to subtract out the integral over
-    ! the rectangle (x1m,x2m) x (y1m,y2m) computed using
-    ! topo arrays mtopoorder(mtopofiles) to mtopoorder(m+1),
-    ! and then adding in the integral over this same region using 
-    ! topo array mtopoorder(m).
+  ! Corrections are needed if the new topo array intersects the grid cell.
+  ! Let the intersection be (x1m,x2m) x (y1m,y2m).
+  ! Two corrections are needed, first to subtract out the integral over
+  ! the rectangle (x1m,x2m) x (y1m,y2m) computed using
+  ! topo arrays mtopoorder(mtopofiles) to mtopoorder(m+1),
+  ! and then adding in the integral over this same region using 
+  ! topo array mtopoorder(m).
 
-    ! Note that the function topointegral returns the integral over the 
-    ! rectangle based on a single topo array, and that routine calls
-    ! bilinearintegral.
-
-
-    implicit none
-
-    ! arguments
-    real (kind=8), intent(in) :: x1,x2,y1,y2
-    integer, intent(in) :: m
-    real (kind=8), intent(out) :: integral
-
-    ! local
-    real(kind=8) :: xmlo,xmhi,ymlo,ymhi,area,x1m,x2m, &
-        y1m,y2m, int1,int2,int3
-    integer :: mfid, indicator, mp1fid, i0
-    real(kind=8), external :: topointegral  
+  ! Note that the function topointegral returns the integral over the 
+  ! rectangle based on a single topo array, and that routine calls
+  ! bilinearintegral.
 
 
-    mfid = mtopoorder(m)
-    i0=i0topo(mfid)
+  implicit none
 
-    if (m == mtopofiles) then
-         ! innermost step of recursion reaches this point.
-         ! only using coarsest topo grid -- compute directly...
-         call intersection(indicator,area,xmlo,xmhi, &
-             ymlo,ymhi, x1,x2,y1,y2, &
-             xlowtopo(mfid),xhitopo(mfid),ylowtopo(mfid),yhitopo(mfid))
+  ! arguments
+  real(kind=8), intent(in) :: domain(1:4)
+  integer, intent(in) :: m
+  real(kind=8), intent(out) :: integral
 
-         if (indicator.eq.1) then
-            ! cell overlaps the file
-            ! integrate surface over intersection of grid and cell
-            integral = topointegral( xmlo,xmhi,ymlo, &
-                    ymhi,xlowtopo(mfid),ylowtopo(mfid),dxtopo(mfid), &
-                    dytopo(mfid),mxtopo(mfid),mytopo(mfid),topowork(i0),1)
-         else
-            integral = 0.d0
-         endif
+  ! local
+  integer :: mfid, indicator
+  real(kind=8), external :: topointegral
+  double precision area, int1, int2, int3
+  double precision rectintdomain(1:4), topoparam(1:6)
 
+  mfid = topo_order(m)
+
+  topoparam(1) = topo_data(mfid)%x_lower; topoparam(2) = topo_data(mfid)%x_upper
+  topoparam(3) = topo_data(mfid)%y_lower; topoparam(4) = topo_data(mfid)%y_upper
+  topoparam(5) = topo_data(mfid)%dx; topoparam(6) = topo_data(mfid)%dy
+
+  if (m == num_topo_files) then
+    ! innermost step of recursion reaches this point.
+    ! only using coarsest topo grid -- compute directly...
+    call intersection(indicator, area, rectintdomain, domain, &
+                      topoparam(1:4))
+
+      if (indicator .eq. 1) then
+        ! cell overlaps the file
+        ! integrate surface over intersection of grid and cell
+        integral = topointegral(rectintdomain, topoparam, &
+                                topo_data(mfid)%num_cells(1), &
+                                topo_data(mfid)%num_cells(2), &
+                                topo_data(mfid)%z, 1)
+      else
+        integral = 0.d0
+      endif
+
+  else
+    ! recursive call to compute area using one fewer topo grids:
+    call rectintegral(domain, m+1, int1)
+
+    ! region of intersection of cell with new topo grid:
+    call intersection(indicator, area, rectintdomain, domain, &
+                      topoparam(1:4))
+
+
+    if (area > 0) then
+
+      ! correction to subtract out from previous set of topo grids:
+      call rectintegral(rectintdomain, m+1, int2)
+
+      ! correction to add in for new topo grid:
+      int3 = topointegral(rectintdomain, topoparam, &
+                          topo_data(mfid)%num_cells(1), &
+                          topo_data(mfid)%num_cells(2), &
+                          topo_data(mfid)%z, 1)
+
+      ! adjust integral due to corrections for new topo grid:
+      integral = int1 - int2 + int3
     else
-        ! recursive call to compute area using one fewer topo grids:
-        call rectintegral(x1,x2,y1,y2,m+1,int1)
-
-        ! region of intersection of cell with new topo grid:
-        call intersection(indicator,area,x1m,x2m, &
-             y1m,y2m, x1,x2,y1,y2, &
-             xlowtopo(mfid),xhitopo(mfid),ylowtopo(mfid),yhitopo(mfid))
-
-        
-        if (area > 0) then
-        
-            ! correction to subtract out from previous set of topo grids:
-            call rectintegral(x1m,x2m,y1m,y2m,m+1,int2)
-    
-            ! correction to add in for new topo grid:
-            int3 = topointegral(x1m,x2m, y1m,y2m, &
-                        xlowtopo(mfid),ylowtopo(mfid),dxtopo(mfid), &
-                        dytopo(mfid),mxtopo(mfid),mytopo(mfid),topowork(i0),1)
-    
-            ! adjust integral due to corrections for new topo grid:
-            integral = int1 - int2 + int3
-        else
-            integral = int1
-        endif
+      integral = int1
+      endif
     endif
 
 end subroutine rectintegral
 
-    
+subroutine intersection(indicator,area,bound,rect1,rect2)
 
-subroutine intersection(indicator,area,xintlo,xinthi, &
-           yintlo,yinthi,x1lo,x1hi,y1lo,y1hi,x2lo,x2hi,y2lo,y2hi)
+  ! find the intersection of two rectangles, return the intersection
+  ! and it's area, and indicator =1
+  ! if there is no intersection, indicator =0
 
-    ! find the intersection of two rectangles, return the intersection
-    ! and it's area, and indicator =1
-    ! if there is no intersection, indicator =0
+  implicit none
 
-      implicit none
+  integer, intent(out) :: indicator
 
-      integer, intent(out) :: indicator
+  real(kind=8), intent(in) :: rect1(1:4), rect2(1:4)
+  real(kind=8), intent(out) :: area, bound(1:4)
+  real(kind=8) :: x1_low, x1hi, y1_low, y1hi, x2low, x2hi, y2low, y2hi
+  real(kind=8) :: xintlow, xinthi, yintlow, yinthi
 
-      real(kind=8), intent(in) ::  x1lo,x1hi,y1lo,y1hi,x2lo,x2hi,y2lo,y2hi
-      real(kind=8), intent(out) :: area,xintlo,xinthi,yintlo,yinthi
+  !Set boundary for rect1
+  x1_low = rect1(1); x1hi = rect1(2)
+  y1_low = rect1(3); y1hi = rect1(4)
 
-      xintlo=dmax1(x1lo,x2lo)
-      xinthi=dmin1(x1hi,x2hi)
-      yintlo=dmax1(y1lo,y2lo)
-      yinthi=dmin1(y1hi,y2hi)
+  ! Set boundary for rect2
+  x2low = rect2(1); x2hi = rect2(2)
+  y2low = rect2(3); y2hi = rect2(4)
 
+  ! Boundary of the intersection part
+  xintlow = dmax1(x1_low, x2low)
+  xinthi = dmin1(x1hi, x2hi)
+  yintlow = dmax1(y1_low, y2low)
+  yinthi = dmin1(y1hi, y2hi)
 
-      if (xinthi.gt.xintlo.and.yinthi.gt.yintlo) then
-         area = (xinthi-xintlo)*(yinthi-yintlo)
-         indicator = 1
-      else
-         area = 0.d0
-         indicator = 0
-      endif
+  ! Whether rect1 and rect2 intersect
+  if (xinthi.gt.xintlow .and. yinthi.gt.yintlow) then
+    area = (xinthi - xintlow)*(yinthi - yintlow)
+    indicator = 1
+    bound(1) = xintlow; bound(2) = xinthi
+    bound(3) = yintlow; bound(4) = yinthi
+  else
+    area = 0.d0
+    indicator = 0
+    bound(1) = -1; bound(2) = -1
+    bound(3) = -1; bound(4) = -1
+  endif
 
 end subroutine intersection
 
