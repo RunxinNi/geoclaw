@@ -1,115 +1,113 @@
+!===========================================================================
+function topointegral(domain, topoparam, mx, my, z, intmethod)
+!===========================================================================
 
-c===========================================================================
-       function topointegral(xim,xip,yjm,yjp,
-     &                   xxlow,yylow,dxx,dyy,mxx,myy,zz,intmethod)
-c===========================================================================
+!###########################################################################
+      !topointegral integrates a surface over a rectangular region
+      !that is the intersection with a Cartesion grid (of topography data)
+      !the surface integrated is defined by a piecewise bilinear through the
+      !nodes of the Cartesian grid.
 
-c###########################################################################
-c     topointegral integrates a surface over a rectangular region
-c     that is the intersection with a Cartesion grid (of topography data)
-c     the surface integrated is defined by a piecewise bilinear through the
-c     nodes of the Cartesian grid.
+      !The rectangular intersection has coords:
+      !xim <= x <= xip, yjm <= y <= yjp
 
-c      The rectangular intersection has coords:
-c      xim <= x <= xip, yjm <= y <= yjp
-c
-c      The Cartesian grid has coords:
-c      xxlow <= x <= xxhi, yylow <= y <= yyhi, with grid cell size dxx by dyy
-c      and mxx by myy cells.
-c
-c                                                written by David L. George
-c                                                Seattle, WA 7/16/08
-c###########################################################################
+      !The Cartesian grid has coords:
+      !xxlow <= x <= xxhi, yylow <= y <= yyhi, with grid cell size dxx by dyy
+      !and mxx by myy cells.
 
-      use geoclaw_module
+                                               !written by David L. George
+                                                !Seattle, WA 7/16/08
+!###########################################################################
 
-      implicit double precision (a-h,o-z)
-      double precision zz(1:mxx,1:myy)
+   use geoclaw_module
+   use topo_module, only: intersection
+   
+   !i/o   
+   real(kind=8) :: domain(1:4), topoparam(1:6), z(1:mx,1:my)
+   real(kind=8) :: topointegral
+   
+   !local
+   real(kind=8) :: area, xim, xip, yjm, yjp
+   real(kind=8) :: xlow, ylow, xhi, yhi, dx, dy
+   real(kind=8) :: x1, x2, y1, y2, distart, djstart, diend, djend
+   real(kind=8) :: theintegral, bilinearintegral, bilinearintegral_s
+   real(kind=8) :: inttopoparam(1:4), intcorners(1:2,1:2), rect(1:4)
 
-c     # initialize:
-      theintegral = 0.d0
+   !initialize:
+   theintegral = 0.d0
 
-      xxhi=xxlow+(mxx-1)*dxx
-      yyhi=yylow+(myy-1)*dyy
+   xlow = topoparam(1); xhi = topoparam(2)
+   ylow = topoparam(3); yhi = topoparam(4)
+   dx = topoparam(5); dy = topoparam(6)
 
-c========TEST FOR SMALL ROUNDING ERROR==========
-      if ((xim-xxlow).lt.0.d0.or.(xip-xxhi).gt.0.d0) then
-         xim=dmax1(xxlow,xim)
-         xip=dmin1(xxhi,xip)
-         endif
+!========TEST FOR SMALL ROUNDING ERROR==========
+   call intersection(indicator, area, domain, domain, topoparam(1:4))
 
-      if ((yjm-yylow).lt.0.d0.or.(yjp-yyhi).gt.0.d0) then
-         yjm=dmax1(yylow,yjm)
-         yjp=dmin1(yyhi,yjp)
-         endif
-c=========================================
+   xim = domain(1); xip = domain(2)
+   yjm = domain(3); yjp = domain(4)
 
-      dx=xip-xim
-      dy=yjp-yjm
+!=============INTEGRATE PIECEWISE BILINEAR OVER RECTANGULAR REGION====
+   if (intmethod .eq. 1) then !use bilinear method
 
-c=============INTEGRATE PIECEWISE BILINEAR OVER RECTANGULAR REGION====
-      if (intmethod.eq.1) then !use bilinear method
+      !don't waste time looping through the entire grid
+      !just find indices that include the rectangular region
 
-c         don't waste time looping through the entire grid
-c         just find indices that include the rectangular region
+      distart = (xim - xlow)/dx
+      istart = idint(distart) + 1
+      
+      djstart = (yjm - ylow)/dy
+      jstart = idint(djstart) + 1
 
-         djjstart=(yjm-yylow)/dyy
-         jjstart=idint(djjstart)+1
+      diend = (xip - xlow)/dx
+      iend = ceiling(diend) + 1
 
-         diistart=(xim-xxlow)/dxx
-         iistart=idint(diistart)+1
+      djend = (yjp-ylow)/dy
+      jend = ceiling(djend) + 1
 
-         diiend=(xip-xxlow)/dxx
-         iiend=ceiling(diiend) + 1
-
-         djjend=(yjp-yylow)/dyy
-         jjend=ceiling(djjend)+1
-
-         iistart=max(iistart,1)
-         jjstart=max(jjstart,1)
-         iiend=min(mxx,iiend)
-         jjend=min(myy,jjend)
+      istart = max(istart, 1)
+      jstart = max(jstart, 1)
+      iend = min(mx, iend)
+      jend = min(my, jend)
 
 
-         do jj=jjstart,jjend-1
-            y1=yylow + (jj-1.d0)*dyy
-            y2=yylow + (jj)*dyy
-c           # the array zz is indexed from north to south: jjz is the actual index
-c           # of interest in the array zz
-            jjz1= myy-jj+1
-            jjz2= jjz1-1
+      do j = jstart, jend-1
+         y1 = ylow + (j - 1.d0)*dy
+         y2 = ylow + j*dy
+         ! the array zz is indexed from north to south: jjz is the actual index
+         ! of interest in the array zz
+         jz1 = my - j + 1
+         jz2 = jz1 - 1
 
-            do ii=iistart,iiend-1
-               x1=xxlow + (ii-1.d0)*dxx
-               x2=xxlow + (ii)*dxx
+         do i = istart, iend-1
+            x1 = xlow + (i - 1.d0)*dx
+            x2 = xlow + i*dx
 
-               z11 = zz(ii,jjz1)
-               z12 = zz(ii,jjz2)
-               z21 = zz(ii+1,jjz1)
-               z22 = zz(ii+1,jjz2)
+            intcorners(1,1) = z(i,jz1)
+            intcorners(1,2) = z(i,jz2)
+            intcorners(2,1) = z(i+1,jz1)
+            intcorners(2,2) = z(i+1,jz2)
+               
+            inttopoparam(1) = x1; inttopoparam(2) = x2
+            inttopoparam(3) = y1; inttopoparam(4) = y2
 
-               if (coordinate_system.eq.1) then !cartesian rectangle
-                  theintegral = theintegral + bilinearintegral(
-     &                                         xim,xip,yjm,yjp,
-     &                                         x1,x2,y1,y2,
-     &                                         dxx,dyy,
-     &                                         z11,z12,z21,z22)
-                elseif (coordinate_system.eq.2) then !integrate on surface of sphere
-                  theintegral = theintegral + bilinearintegral_s(
-     &                                         xim,xip,yjm,yjp,
-     &                                         x1,x2,y1,y2,
-     &                                         dxx,dyy,
-     &                                         z11,z12,z21,z22)
-                else
-                  write(*,*)  'TOPOINTEGRAL: coordinate_system error'
-                  endif
-               enddo
-            enddo
+            if (coordinate_system .eq. 1) then !cartesian rectangle
+               theintegral = theintegral + bilinearintegral(domain, &
+                                                      inttopoparam, &
+                                                      intcorners)
+            elseif (coordinate_system .eq. 2) then !integrate on surface of sphere
+               theintegral = theintegral + bilinearintegral_s(domain, &
+                                                        inttopoparam, &
+                                                        intcorners)
+            else
+               write(*,*)  'TOPOINTEGRAL: coordinate_system error'
+            endif
+         enddo
+      enddo
 
-      else
-         write(*,*) 'TOPOINTEGRAL: only intmethod = 1,2 is supported'
-         endif
+   else
+      write(*,*) 'TOPOINTEGRAL: only intmethod = 1,2 is supported'
+   endif
 
-      topointegral= theintegral
-      return
-      end function
+   topointegral = theintegral
+   return
+end function
